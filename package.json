@@ -1,0 +1,24 @@
+{
+  "name": "edp-build-versioning",
+  "version": "0.1.0",
+  "description": "A versioning processor for EDP BUILD",
+  "main": "Versioning.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:wuhy/edp-build-versioning.git"
+  },
+  "keywords": [
+    "edp build",
+    "md5",
+    "version"
+  ],
+  "author": "sparklewhy@gmail.com",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/wuhy/edp-build-versioning/issues"
+  },
+  "homepage": "https://github.com/wuhy/edp-build-versioning"
+}
