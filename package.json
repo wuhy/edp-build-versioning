@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:wuhy/edp-build-versioning.git"
+    "url": "https://github.com/wuhy/edp-build-versioning.git"
   },
   "keywords": [
     "edp build",
