@@ -65,7 +65,7 @@
         "require": true,
         "module": true,
         "exports": true,
-        "__dirname": true,
-        "process": true
+        "AbstractProcessor": true,
+        "Buffer": true
     }
 }
