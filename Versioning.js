@@ -1,7 +1,7 @@
 /**
  * @file 版本化处理器：自动生成指定路径前缀的版本号信息的映射关键，同时根据指定的css/js文件路径，
  *       生成版本号信息，版本号基于MD5值生成。
- *       NOTICE: 该版本化处理器对于项目的 `dep` 目录不会做处理
+ *       NOTICE: 该版本化处理器默认对于项目的 `dep` 目录不会做处理
  *
  * 使用方式：
  * new Versioning(
@@ -18,6 +18,7 @@
  * @author wuhuiyao
  */
 
+var util = require('./lib/util');
 var inlineMd5Processor = require('./lib/inline-resource-md5');
 var requireMd5Processor = require('./lib/require-resource-md5');
 
@@ -25,10 +26,11 @@ var requireMd5Processor = require('./lib/require-resource-md5');
  * 更新引用的资源的路径：为引用的资源路径加上版本号信息，或者替换资源文件的版本号信息的占位符
  * NOTICE: 这里只对非dep目录下的模板文件或者html文件的资源引用加上版本号信息其它忽略
  *
+ * @param {Versioning} processor 版本号处理器
  * @param {Array.<Object>} files 要处理的文件对象列表
  * @param {Object} versionMap 资源文件的版本号信息
  */
-function updateResourceReference(files, versionMap) {
+function updateResourceReference(processor, files, versionMap) {
 
     // 缓存下面要查找替换的正则表达式
     var regexpMap = {};
@@ -36,10 +38,12 @@ function updateResourceReference(files, versionMap) {
         regexpMap[key] = new RegExp(key, 'g');
     }
 
+    var tplFileSuffix = processor.fileSuffix.tpl;
+
     for (var i = 0, len = files.length; i < len; i++) {
         var fileInfo = files[i];
 
-        if (/html|tpl/i.test(fileInfo.extname)) {
+        if (util.isFileTypeOf(fileInfo.extname, tplFileSuffix)) {
             for (key in versionMap) {
                 var value = versionMap[key];
 
@@ -58,18 +62,134 @@ function updateResourceReference(files, versionMap) {
 }
 
 /**
+ * 默认的文件后缀类型定义
+ *
+ * @type {{tpl: string, js: string, css: string}}
+ * @const
+ */
+var DEFAULT_FILE_SUFFIX = {
+    tpl: 'tpl,html',
+    js: 'js',
+    css: 'css,less'
+};
+
+/**
+ * 初始化文件后缀信息
+ *
+ * @inner
+ * @param {Versioning} processor 版本化处理器
+ */
+function initFileSuffixInfo(processor) {
+    var fileSuffix = processor.fileSuffix || (processor.fileSuffix = {});
+    var suffix;
+
+    for (var k in DEFAULT_FILE_SUFFIX) {
+        if (DEFAULT_FILE_SUFFIX.hasOwnProperty(k)) {
+            suffix = fileSuffix[k] || DEFAULT_FILE_SUFFIX[k];
+            fileSuffix[k] = suffix.toLowerCase().replace(/\s/g, '').split(',');
+        }
+    }
+}
+
+/**
+ * 获取真正处理的文件
+ *
+ * @inner
+ * @param {Versioning} processor 版本号处理器
+ * @param {ProcessContext} processContext 构建环境对象
+ * @return {Array.<Object>}
+ */
+function getProcessFiles(processor, processContext) {
+
+    // 滤掉 dep 下文件
+    return processContext.getFiles().filter(
+            processor.filter || (function (file) {
+            return !(/^dep\//.test(file.path));
+        })
+    );
+}
+
+/**
+ * 过滤掉不处理的 require 资源文件
+ *
+ * @inner
+ * @param {Array.<Object>} files 原始要处理的资源文件列表
+ * @param {Versioning} processor 版本号处理器
+ * @return {Array.<Object>}
+ */
+function filterRequireFiles(files, processor) {
+    var jsFilePaths = processor.jsFilePaths || [];
+    var requireResource = processor.requireResource;
+
+    // 要滤掉的普通 js 文件
+    var ignoreJsFileMap = {};
+    jsFilePaths.forEach(function (value) {
+        ignoreJsFileMap[value] = 1;
+    });
+
+    // 初始化要处理的 require 资源文件判断函数
+    if (typeof requireResource !== 'function') {
+        var resTypes = requireResource.split(',');
+        var fileSuffix = processor.fileSuffix;
+
+        requireResource = function (file) {
+            var extname = file.extname;
+
+            for (var i = 0, len = resTypes.length; i < len; i++) {
+                if (util.isFileTypeOf(
+                    extname, fileSuffix[resTypes[i].toLowerCase()] || [])
+                    ) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+    }
+
+    var result = [];
+    var f;
+    for (var i = 0, len = files.length; i < len; i++) {
+        f = files[i];
+
+        if (requireResource(f) && !ignoreJsFileMap[f.path]) {
+            result.push(f);
+        }
+    }
+
+    return result;
+}
+
+/**
  * 版本化处理器
  *
  * @constructor
  * @param {Object} options 初始化参数
- * @param {Object} options.files
- * @param {Array.<string>=} options.jsSuffixs js后缀，可选，默认'js'
- * @param {Array.<string>=} options.jsFilePaths 要加上版本号信息的js文件路径，可选
- * @param {Array.<string>=} options.cssSuffixs css后缀，可选，默认'css', 'less'
- * @param {Array.<string>=} options.cssFilePaths 要加上版本号信息的css文件路径，可选
+ *
+ * @param {string=} options.sourceRoot 源文件的跟目录，默认 'src' ，可选
+ *
+ * @param {Object=} options.fileSuffix 自定义的文件类型后缀
+ * @param {string=} options.fileSuffix.tpl 模板文件后缀，多个以英文逗号分隔，可选，默认 'tpl,html'
+ * @param {string=} options.fileSuffix.js js文件后缀，多个以英文逗号分隔，可选，默认 'js'
+ * @param {string=} options.fileSuffix.css css文件后缀，多个以英文逗号分隔，可选，默认 'css,less'
+ *
+ * @param {Array.<string>=} options.jsFilePaths 要加上版本号信息的内联js文件路径，可选
+ * @param {Array.<string>=} options.cssFilePaths 要加上版本号信息的内联css文件路径，可选
  *                          跟cssDirs可以配合使用
  * @param {Array.<string>=} opitons.cssDirs 要扫描的css目录，对于找到的css文件会为其引用
  *                          添加版本号信息，可选
+ *
+ * @param {string|function(Object):boolean=} options.requireResource
+ *                         要处理的 require 资源类型，如果配置了 `jsFilePaths` ，默认会
+ *                         忽略这些文件，可以指定要要处理的 require 的资源类型：'tpl',
+ *                         'js','css', 多个以英文逗号分隔，资源类型定义见 `fileSuffix` ，
+ *                         也可以传入 function，自行判断是否要处理该文件，
+ *                         默认为 `js`, `tpl`，可选
+ *
+ * @param {function(Object):boolean=} options.filter 自定义的过滤器，如果文件是要被处理
+ *                                    return true，默认不处理 `dep` 目录下的资源文件，
+ *                                    可选
+ *
  * @param {number=} options.pathPrefixDepth 要生成版本号信息路径前缀映射关系的路径深度，
  *                  值必须大于0，以src作为根节点开始计算，根节点深度为0，把该值设成该文件树
  *                  最大高度或者大于该高度的值，其等价于基于文件级别的MD5值生成方案。
@@ -81,6 +201,7 @@ function updateResourceReference(files, versionMap) {
  *                      'e.js': 'v=ecc0a9a81c40a65a',
  *                      'a/b': 'v=0a2009174f4df6b2'
  *                  }
+ *
  * @param {string|function(Object)} options.output
  *                                  1) 路径前缀的版本号信息要输出到文件的路径
  *                                  2) 或者自定义的回调函数用于处理输出的版本号信息
@@ -97,18 +218,32 @@ function updateResourceReference(files, versionMap) {
 function Versioning(options) {
     AbstractProcessor.call(this, options);
 
-    // 初始化要加上版本号信息的 js 资源
-    var jsSuffixs = (this.jsSuffixs || (this.jsSuffixs = ['js']));
-    jsSuffixs.forEach(function (value, idx) {
-        jsSuffixs[idx] = value.toLowerCase();
+    // 初始化文件后缀信息
+    initFileSuffixInfo(this);
+
+    // 初始化源文件的根目录
+    this.sourceRoot || (this.sourceRoot = 'src');
+    this.sourceRootRegExp = new RegExp('^' + this.sourceRoot + '/');
+
+    // 初始化要处理的requir资源类型
+    var fileSuffix = this.fileSuffix;
+    var sourceRootRegExp = this.sourceRootRegExp;
+    this.requireResource || (this.requireResource = function (file) {
+        var filePath = file.path;
+        var extname = file.extname;
+
+        return (sourceRootRegExp.test(filePath)
+            && (
+                util.isFileTypeOf(extname, fileSuffix['js'])
+                || util.isFileTypeOf(extname, fileSuffix['tpl'])
+                )
+            );
     });
+
+    // 初始化要加上版本号信息的 js 资源
     Array.isArray(this.jsFilePaths) || (this.jsFilePaths = []);
 
     // 初始化要加上版本号信息的 css 资源
-    var cssSuffixs = (this.cssSuffixs || (this.cssSuffixs = ['css', 'less']));
-    cssSuffixs.forEach(function (value, idx) {
-        cssSuffixs[idx] = value.toLowerCase();
-    });
     Array.isArray(this.cssFilePaths) || (this.cssFilePaths = []);
 
     (+this.pathPrefixDepth > 0) || (this.pathPrefixDepth = 2);
@@ -129,30 +264,13 @@ Versioning.prototype.name = 'Versioning';
  * @param {ProcessContext} processContext 构建环境对象
  * @override
  */
-Versioning.prototype.beforeAll = function ( processContext ) {
+Versioning.prototype.beforeAll = function (processContext) {
 
     // 为了确保处理器只执行一次，这里初始化要处理的文件为一个，
     // 真正处理的文件 {@link getProcessFiles}
     var files = processContext.getFiles();
     this.processFiles = files.length > 0 ? [files[0]] : [];
 };
-
-/**
- * 获取真正处理的文件
- *
- * @inner
- * @param {ProcessContext} processContext 构建环境对象
- * @return {Array.<Object>}
- */
-function getProcessFiles(processContext) {
-
-    // 滤掉 dep 下文件
-    return processContext.getFiles().filter(
-        function (file) {
-            return !(/^dep\//.test(file.path));
-        }
-    );
-}
 
 /**
  * 路径前缀级别的MD5值生成方案。
@@ -170,23 +288,24 @@ function getProcessFiles(processContext) {
  *
  * NOTICE: 该版本化处理器对于项目的 `dep` 目录不会做处理，这里也不建议手动去修改 `dep` 东西，
  *         而是应该由 `dep` 自身的版本号来确保是否有升级，同时这也可以提高 build 效率。
+ *         如果有定制需求，可以通过 `filter` 选项
  *
+ * @override
  */
 Versioning.prototype.process = function (file, processContext, callback) {
-    var files = getProcessFiles(processContext);
+    var files = getProcessFiles(this, processContext);
 
     // 初始化 `esl` require 的资源的版本信息
-    var versionMap = {};
-    requireMd5Processor(this, files, versionMap);
+    var versionMap = requireMd5Processor(this, filterRequireFiles(files, this));
 
     // 初始化 `js文件` 的版本信息
-    inlineMd5Processor.initJSFileVersionInfo(this, files, versionMap);
+    var jsVersionMap = inlineMd5Processor.generateJSFileVersion(this, files);
 
     // 初始化 `css文件` 的版本信息
-    inlineMd5Processor.initCSSFileVersionInfo(this, files, versionMap);
+    var cssVersionMap = inlineMd5Processor.generateCSSFileVersion(this, files);
 
     // 更新引用的资源的路径：为其加上版本号信息
-    updateResourceReference(files, versionMap);
+    updateResourceReference(this, files, util.mixin(versionMap, jsVersionMap, cssVersionMap));
 
     callback();
 };
