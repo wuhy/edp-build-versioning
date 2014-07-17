@@ -6,8 +6,11 @@
  * 使用方式：
  * new Versioning(
  *     {
+ *         imgFilePaths: ['src/img/sprite.png'] // 当前只处理 css 图片引用版本号添加！
+ *         // autoScanImg: true, // 自动为所有引用的 图片 资源添加版本号信息
  *         jsFilePaths: ['src/common/a.js'],
  *         cssFilePaths: ['src/common/css/main.less'],
+ *         // autoScanCss: true, // 自动为所有引用的 css 文件添加版本号信息
  *         pathPrefixDepth: 3,
  *         output: 'src/version.js'
  *                | function (pathVersionMap, files) {}
@@ -19,8 +22,9 @@
  */
 
 var util = require('./lib/util');
-var inlineMd5Processor = require('./lib/inline-resource-md5');
-var requireMd5Processor = require('./lib/require-resource-md5');
+var inlineMd5Generator = require('./lib/inline-resource-md5');
+var requireMd5Generator = require('./lib/require-resource-md5');
+var imgVersioning = require('./lib/img-versioning');
 
 /**
  * 更新引用的资源的路径：为引用的资源路径加上版本号信息，或者替换资源文件的版本号信息的占位符
@@ -70,7 +74,8 @@ function updateResourceReference(processor, files, versionMap) {
 var DEFAULT_FILE_SUFFIX = {
     tpl: 'tpl,html',
     js: 'js',
-    css: 'css,less'
+    css: 'css,less',
+    img: 'png,jpg,gif'
 };
 
 /**
@@ -100,13 +105,15 @@ function initFileSuffixInfo(processor) {
  * @return {Array.<Object>}
  */
 function getProcessFiles(processor, processContext) {
+    var filter = processor.filter;
+    if (typeof filter !== 'function') {
+        filter = function (file) {
+            return !(/^dep\//.test(file.path));
+        };
+    }
 
     // 滤掉 dep 下文件
-    return processContext.getFiles().filter(
-            processor.filter || (function (file) {
-            return !(/^dep\//.test(file.path));
-        })
-    );
+    return processContext.getFiles().filter(filter);
 }
 
 /**
@@ -172,12 +179,19 @@ function filterRequireFiles(files, processor) {
  * @param {string=} options.fileSuffix.tpl 模板文件后缀，多个以英文逗号分隔，可选，默认 'tpl,html'
  * @param {string=} options.fileSuffix.js js文件后缀，多个以英文逗号分隔，可选，默认 'js'
  * @param {string=} options.fileSuffix.css css文件后缀，多个以英文逗号分隔，可选，默认 'css,less'
+ * @param {string=} options.fileSuffix.img 图片文件后缀，多个以英文逗号分隔，可选，默认 'png,jpg,gif'
  *
  * @param {Array.<string>=} options.jsFilePaths 要加上版本号信息的内联js文件路径，可选
+ *
  * @param {Array.<string>=} options.cssFilePaths 要加上版本号信息的内联css文件路径，可选
- *                          跟cssDirs可以配合使用
- * @param {Array.<string>=} opitons.cssDirs 要扫描的css目录，对于找到的css文件会为其引用
- *                          添加版本号信息，可选
+ * @param {Array.<string>=} opitons.autoScanCss 可以指定自动扫描所有css文件，为其引用
+ *                          添加版本号信息，如果设为 true，会忽略`cssFilePaths` 的设置，
+ *                          可选，默认false
+ *
+ * @param {Array.<string>=} options.imgFilePaths 要加上版本号信息的图片文件路径，可选
+ * @param {boolean} options.autoScanImg 可以指定自动扫描所有img文件，为其引用
+ *                          添加版本号信息，如果设为 true，会忽略`imgFilePaths` 的设置，
+ *                          可选，默认false
  *
  * @param {string|function(Object):boolean=} options.requireResource
  *                         要处理的 require 资源类型，如果配置了 `jsFilePaths` ，默认会
@@ -296,16 +310,23 @@ Versioning.prototype.process = function (file, processContext, callback) {
     var files = getProcessFiles(this, processContext);
 
     // 初始化 `esl` require 的资源的版本信息
-    var versionMap = requireMd5Processor(this, filterRequireFiles(files, this));
+    var versionMap = requireMd5Generator(this, filterRequireFiles(files, this));
 
     // 初始化 `js文件` 的版本信息
-    var jsVersionMap = inlineMd5Processor.generateJSFileVersion(this, files);
+    var jsVersionMap = inlineMd5Generator.generateJSFileVersion(this, files);
 
     // 初始化 `css文件` 的版本信息
-    var cssVersionMap = inlineMd5Processor.generateCSSFileVersion(this, files);
+    var cssVersionMap = inlineMd5Generator.generateCSSFileVersion(this, files);
 
     // 更新引用的资源的路径：为其加上版本号信息
-    updateResourceReference(this, files, util.mixin(versionMap, jsVersionMap, cssVersionMap));
+    updateResourceReference(
+        this, files, util.mixin(versionMap, jsVersionMap, cssVersionMap)
+    );
+
+    // 为 `img文件` 添加版本号信息
+    imgVersioning(
+        this, files, inlineMd5Generator.generateImgVersion(this, files)
+    );
 
     callback();
 };
