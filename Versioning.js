@@ -309,6 +309,11 @@ Versioning.prototype.beforeAll = function (processContext) {
 Versioning.prototype.process = function (file, processContext, callback) {
     var files = getProcessFiles(this, processContext);
 
+    // 为 `img文件` 添加版本号信息: 这里必须放在前面执行，否则会影响后续文件md5计算
+    imgVersioning(
+        this, files, inlineMd5Generator.generateImgVersion(this, files)
+    );
+
     // 初始化 `esl` require 的资源的版本信息
     var versionMap = requireMd5Generator(this, filterRequireFiles(files, this));
 
@@ -321,11 +326,6 @@ Versioning.prototype.process = function (file, processContext, callback) {
     // 更新引用的资源的路径：为其加上版本号信息
     updateResourceReference(
         this, files, util.mixin(versionMap, jsVersionMap, cssVersionMap)
-    );
-
-    // 为 `img文件` 添加版本号信息
-    imgVersioning(
-        this, files, inlineMd5Generator.generateImgVersion(this, files)
     );
 
     callback();
