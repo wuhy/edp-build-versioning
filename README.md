@@ -4,7 +4,7 @@ edp-build-versioning
 
 > EDP Build plugin for Resource Versioning
 
-edp-build-versioning 是 [edp-build](https://github.com/ecomfe/edp-build)的一个插件，用于为 [esl](https://github.com/ecomfe/esl) `require` 的 `JS` 和 `TPL` 资源自动添加MD5版本号信息，也支持为 `CSS` 、`JS` 、`图片` 内联资源文件自动添加 `MD5版本号` 信息。
+edp-build-versioning 是 [edp-build](https://github.com/ecomfe/edp-build)的一个插件，用于为 [esl](https://github.com/ecomfe/esl) `require` 的 `JS` 和 `TPL` 资源自动添加MD5版本号信息，也支持为 `CSS` 、`JS` 、`图片` 等内联资源文件自动添加 `MD5版本号` 信息。
 
 **对于图片资源添加版本号信息，目前只处理 `css` 引用的图片资源。**
 
@@ -29,27 +29,31 @@ npm install edp-build-versioning
     
         var Versioning = require('edp-build-versioning');
         var versionProcessor = new Versioning({
-            // 要添加版本号的图片文件路径
-            imgFilePaths: ['src/img/sprite.png'],
-            // 自动为所有引用的 图片 资源添加版本号信息
-            // autoScanImg: true, 
-            
-            // 要添加版本号的内联js文件路径
-            jsFilePaths: ['src/common/a.js'], 
-            
-            // 要添加版本号信息的内联css文件路径
-            cssFilePaths: ['src/common/css/main.less'], 
+            // 要添加版本号的内联资源文件路径
+            filePaths: [
+                'src/common/a.js',
+                'src/common/css/main.less'
+            ],
+
             // 自动扫描所有css为其引用添加版本号
-            // autoScanCss: true, 
-            
-            // 要生成的路径前缀的版本号信息最大路径前缀深度，为了避免生成
-            // 的路径前缀信息较多，理想情况下，每个文件对应的路径都生成，
-            // 对于项目文件较多，将导致如下生成版本号信息太多，影响页面
-            // 加载及 esl require 的效率，因此建议控制下深度值
-            pathPrefixDepth: 2, 
-            
-            // require 资源生成的版本号信息输出地方
-            output: '\'esl_resource_version\'' 
+            // autoScanCss: true,
+
+            // 为 css url 引用的的资源文件添加版本号
+            cssURL: true,
+            // 也可以指定特定的资源
+            // cssURL: ['src/img/sprite.png'],
+
+            require: {
+                // 要生成的路径前缀的版本号信息最大路径前缀深度，为了避免生成
+                // 的路径前缀信息较多，理想情况下，每个文件对应的路径都生成，
+                // 对于项目文件较多，将导致如下生成版本号信息太多，影响页面
+                // 加载及 esl require 的效率，因此建议控制下深度值
+                pathPrefixDepth: 2,
+
+                // require 资源生成的版本号信息输出地方
+                output: '\'esl_resource_version\''
+            }
+
         });
     
         // init EDP Build other processors
