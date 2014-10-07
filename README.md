@@ -6,8 +6,6 @@ edp-build-versioning
 
 edp-build-versioning 是 [edp-build](https://github.com/ecomfe/edp-build)的一个插件，用于为 [esl](https://github.com/ecomfe/esl) `require` 的 `JS` 和 `TPL` 资源自动添加MD5版本号信息，也支持为 `CSS` 、`JS` 、`图片` 等内联资源文件自动添加 `MD5版本号` 信息。
 
-**对于图片资源添加版本号信息，目前只处理 `css` 引用的图片资源。**
-
 关于edp支持的版本号处理方案及关于 `Versioning` 处理器实现方案一个简单探讨，参见这个 [Issue] (https://github.com/ecomfe/edp/issues/232)。
 
 ## 如何使用
