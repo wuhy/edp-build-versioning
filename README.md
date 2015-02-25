@@ -51,6 +51,22 @@ npm install edp-build-versioning
                 // require 资源生成的版本号信息输出地方
                 output: '\'esl_resource_version\''
             }
+            
+            // 也可以自定义版本号生成器
+            // require: {
+            //   version: function (processFiles) {
+            //      // 简单返回时间戳作为所有资源的版本号 也可以自行返回 路径前缀的版本号 map
+            //      return Date.now();
+            //      // return {'a/b': 'v=123'};
+            //   },
+            //   output: '\'esl_resource_version\''
+            // }
+            
+            // 也可以将版本号信息输出到特定的文件
+            // require: {
+            //    pathPrefixDepth: 2,
+            //    output: 'src/version.js'
+            // }
 
         });
     
@@ -92,6 +108,20 @@ npm install edp-build-versioning
     });
     ```
 
+   如果打算把版本号输出到特定的文件里，version.js 文件为空文件即可，在入口的 html 文件 添加如下引用，注意放在 require.config 前面：
+   
+   ```html
+   <script src="src/version.js"></script>
+   <script>
+      require.config({
+          'baseUrl': 'src',
+          'packages': [
+          ]
+      });
+      
+   </script>   
+   ```
+   
 ### Build
 
 执行 `edp build` 后，`urlArgs` 值会替换成类似如下的值，由于路径深度为 `2` 因此下面最长只会看到
@@ -116,3 +146,27 @@ require.config({
 ```html
 <link href="asset/common/css/main.css?v=7a6f7d07c5570c28" rel="stylesheet" />
 ```
+
+如果是将版本号输出到特定的文件里，结果会是如下：
+
+version.js 内容：
+
+```javascript
+require.config({
+    'baseUrl': '',
+    'urlArgs': {
+        '05522e67.tpl': 'v=05522e67adb8b30c',
+        'actionConf': 'v=59f0fad74c9c1db4',
+        'main': 'v=fe9fa327ea8fbb72',
+        'manage/index': 'v=d41d8cd98f00b204'
+        // ...
+    }
+});
+```
+
+对于引用的版本号文件，自动添加md5值作为版本号：
+
+```html
+<script src="src/version.js?v=832b5c8b70bfebe5"></script>
+```
+
