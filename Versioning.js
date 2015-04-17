@@ -107,7 +107,11 @@ function getProcessFiles(processor, processContext) {
     }
 
     // 滤掉 dep 下文件
-    return processContext.getFiles().filter(filter);
+    var files = processContext.getFiles().filter(filter);
+    return files.filter(function (file) {
+        // edp 处理的文件列表里，不知道为啥会出现 null 情况，这里把这种文件给滤掉
+        return file.outputPath != null && file.path != null;
+    });
 }
 
 /**
