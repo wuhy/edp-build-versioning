@@ -47,9 +47,21 @@ npm install edp-build-versioning
                 // 对于项目文件较多，将导致如下生成版本号信息太多，影响页面
                 // 加载及 esl require 的效率，因此建议控制下深度值
                 pathPrefixDepth: 2,
+                
+                // 只针对模块配置文件的 combine 配置的合并模块id和定制的模块id(值为数组情况)
+                // 生成模块版本号信息
+                combine: true|['a/b', 'c'],
 
                 // require 资源生成的版本号信息输出地方
-                output: '\'esl_resource_version\''
+                output: '\'esl_resource_version\'',
+                
+                // 可以指定模块默认使用的版本号信息，当只指定输出特定的模块版本号信息，建议加上该选项
+                // 页面中加上该配置项：require.config({ urlArgs: 'default_resource_version' });
+                defaultOutput: '\'default_resource_version\'',
+                
+                // 当使用 `combine` 且是多页面情况下，启用该选项，只会生成当前页面所引用入口模块
+                // 的版本号信息
+                outputByPage: true
             }
             
             // 也可以自定义版本号生成器
