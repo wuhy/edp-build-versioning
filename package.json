@@ -20,5 +20,8 @@
   "bugs": {
     "url": "https://github.com/wuhy/edp-build-versioning/issues"
   },
-  "homepage": "https://github.com/wuhy/edp-build-versioning"
+  "homepage": "https://github.com/wuhy/edp-build-versioning",
+  "dependencies": {
+    "edp-build-helper": "^0.1.0"
+  }
 }

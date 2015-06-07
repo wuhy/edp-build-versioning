@@ -6,10 +6,61 @@
  * @author wuhuiyao
  */
 
+var edpBuildHelper = require('edp-build-helper');
 var util = require('./lib/util');
 var inlineMd5Generator = require('./lib/inline-resource-md5');
 var requireMd5Generator = require('./lib/require-resource-md5');
 var cssURLVersioning = require('./lib/css-url-versioning');
+
+var ENTRY_REQUIRE_REGEXP = /(\s+require\s*\(\s*\[[^\]]+\]\s*[\)|,])/;
+
+function outputRequireVersionInfoByPage(processor, files, versionMap) {
+    var outputModuleIdMap = {};
+
+    for (var i = 0, len = files.length; i < len; i++) {
+        var fileInfo = files[i];
+
+        if (processor.updateTarget(fileInfo)) {
+
+            // 查找入口模块
+            var moduleIds = edpBuildHelper.extractEntryModuleIds(fileInfo.data);
+            if (!moduleIds.length) {
+                continue;
+            }
+
+            // 初始化入口模块的版本号信息
+            var pageModuleVersionMap = {};
+            for (var m = 0, mLen = moduleIds.length; m < mLen; m++) {
+                var mId = moduleIds[m];
+                if (versionMap[mId]) {
+                    pageModuleVersionMap[mId] = versionMap[mId];
+                    outputModuleIdMap[mId] = 1;
+                }
+            }
+
+            // 输出入口模块的版本号信息的 require.config 配置信息
+            if (Object.keys(pageModuleVersionMap).length) {
+                var requireUrlArgs = '\nrequire.config({ urlArgs: '
+                    + JSON.stringify(pageModuleVersionMap) + ' }); ';
+                fileInfo.data = fileInfo.data.replace(ENTRY_REQUIRE_REGEXP, requireUrlArgs + '$1');
+            }
+        }
+    }
+
+    // 对于未输出过的模块版本号信息，用于全局版本号信息输出
+    var newVersionMap = {};
+    var modukeIds = Object.keys(versionMap);
+    modukeIds.forEach(function (id) {
+        if (!outputModuleIdMap[id]) {
+            newVersionMap[id] = versionMap[id];
+        }
+    });
+
+    return {
+        value: (Object.keys(newVersionMap).length)
+            ? JSON.stringify(newVersionMap) : '\'\''
+    };
+}
 
 /**
  * 更新引用的资源的路径：为引用的资源路径加上版本号信息，或者替换资源文件的版本号信息的占位符
@@ -27,17 +78,16 @@ function updateResourceReference(processor, files, versionMap) {
         regexpMap[key] = new RegExp(key, 'g');
     }
 
-    // 初始化要更新版本号引用的资源文件过滤函数
+    // 预处理下对于需要按页面输出 require 模块的版本号信息
+    var keys = Object.keys(versionMap);
+    keys.forEach(function (k) {
+        var item = versionMap[k];
+        if (item.outputByPage) {
+            versionMap[k] = outputRequireVersionInfoByPage(processor, files, item.value);
+        }
+    });
+
     var updateTarget = processor.updateTarget;
-    if (typeof updateTarget !== 'function') {
-        var resTypes = updateTarget.split(',');
-        var fileSuffix = processor.fileSuffix;
-
-        updateTarget = function (file) {
-            return util.isFileTypeMatch(file, resTypes, fileSuffix);
-        };
-    }
-
     for (var i = 0, len = files.length; i < len; i++) {
         var fileInfo = files[i];
 
@@ -140,6 +190,11 @@ function getProcessFiles(processor, processContext) {
  *                                  或者指定要添加版本号的资源路径
  *
  * @param {Object=} options.require 配置 require 的资源的添加版本号方式，可选，默认不添加
+ * @param {boolean|Array.<string>=} options.require.combine 只为合并的模块生成md5值
+ *                  作为版本号，设置该项默认会读取 `module.conf` 的 `combine`
+ *                  配置，作为生成版本号的模块，也可以传入一个自定义要生成模块版本号的模块
+ *                  id 列表，该列表会与 `module.conf` 的 `combine` 定义的值做合并
+ *                  可选，默认使用 `pathPrefixDepth` 生成
  * @param {number=} options.require.pathPrefixDepth 要生成版本号信息路径前缀映射关系的路
  *                  径深度，值必须大于0，以src作为根节点开始计算，根节点深度为0，把该值设成该文
  *                  件树最大高度或者大于该高度的值，其等价于基于文件级别的MD5值生成方案。
@@ -163,6 +218,12 @@ function getProcessFiles(processor, processContext) {
  *                                      'pathPrefix2': 'v=efg',
  *                                      ...
  *                                  } });
+ * @param {string=} options.require.defaultOutput 默认版本号输出的位置，值
+ *                  同 `require.output` 字符串情况，建议如果指定 `require.combine` 选项，
+ *                  最好提供一个默认的模块的版本号，默认版本号为时间戳，可选
+ * @param {boolean=} options.require.outputByPage 根据每个页面输出该页面入口模块用到的
+ *                  模块的版本信息，而不是所有页面引用所有每个页面入口模块版本号信息，可选，
+ *                  默认 false，当前只针对 `require.combine` 选项开启时才有效
  * @param {function()=} options.require.version 自定义的版本号生成器，可选，默认基于 md5
  *                      该方法会传入当前要处理的require的文件 requireFiles 参数，该方法要求
  *                      返回特定路径前缀的版本号 map 或者所有 requireFiles 的版本号字符串
@@ -214,11 +275,39 @@ function Versioning(options) {
     }
     (+this.pathPrefixDepth > 0) || (this.pathPrefixDepth = 2);
 
+    // 初始化要生成版本号的模块 id
+    if (requireOption.combine) {
+        // 重置路径前缀深度，改为输出所有模块路径的版本号信息
+        this.pathPrefixDepth = Number.MAX_VALUE;
+        var combineConf = edpBuildHelper.readModuleConfSync().combine || {};
+        var combineModuleIds = Object.keys(combineConf);
+        if (Array.isArray(requireOption.combine)) {
+            var customCombine = requireOption.combine;
+            customCombine.forEach(function (id) {
+                if (combineModuleIds.indexOf(id) === -1) {
+                    combineModuleIds.push(id);
+                }
+            });
+        }
+        this.moduleIds = combineModuleIds;
+        this.requireOutputByPage = !!requireOption.outputByPage;
+    }
+
     this.requireOutput = this.output || requireOption.output;
+    this.requireDefaultOutput = requireOption.defaultOutput;
     this.requireVersion = requireOption.version;
 
     // 初始要更新资源引用的版本号的目标文件，默认只更新 模板文件
     this.updateTarget || (this.updateTarget = 'tpl');
+    var updateTarget = this.updateTarget;
+    if (typeof updateTarget !== 'function') {
+        var resTypes = updateTarget.split(',');
+        var fileSuffix = this.fileSuffix;
+
+        this.updateTarget = function (file) {
+            return util.isFileTypeMatch(file, resTypes, fileSuffix);
+        };
+    }
 }
 
 Versioning.prototype = new AbstractProcessor();
