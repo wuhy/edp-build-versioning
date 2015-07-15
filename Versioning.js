@@ -47,14 +47,21 @@ function outputRequireVersionInfoByPage(processor, files, versionMap) {
         }
     }
 
-    // 对于未输出过的模块版本号信息，用于全局版本号信息输出
+    // 输出指定的模块 id 的版本号信息, 过滤掉已经输出过的入口模块版本号信息
     var newVersionMap = {};
-    var modukeIds = Object.keys(versionMap);
-    modukeIds.forEach(function (id) {
-        if (!outputModuleIdMap[id]) {
-            newVersionMap[id] = versionMap[id];
-        }
-    });
+    var versionModuleIds = processor.moduleIds;
+    if (versionModuleIds && versionModuleIds.length) {
+        versionModuleIds.forEach(function (id) {
+            if (versionMap[id]) {
+                if (!outputModuleIdMap[id]) {
+                    newVersionMap[id] = versionMap[id];
+                }
+            }
+            else {
+                console.error('edp build versiong cannot process unknown module id: ' + id);
+            }
+        });
+    }
 
     return {
         value: (Object.keys(newVersionMap).length)
