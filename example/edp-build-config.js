@@ -8,16 +8,31 @@ exports.output = path.resolve( __dirname, 'output' );
 
 exports.getProcessors = function () {
     var Versioning = require('edp-build-versioning');
+    var edpBuildHelper = Versioning.helper;
     var lessProcessor = new LessCompiler({
         files: ['src/common/css/main.less']
     });
     var cssProcessor = new CssCompressor();
-    var moduleProcessor = new ModuleCompiler();
+    var moduleProcessor = new ModuleCompiler({
+        getCombineConfig: function () {
+            var entryModuleIds = edpBuildHelper.extractPageEntryModules();
+
+            console.log('combine module number: ' + entryModuleIds.length);
+
+            var combineConf = {};
+            entryModuleIds.forEach(function (id) {
+                console.log(id);
+                combineConf[id] = 1;
+            });
+
+            return combineConf;
+        }
+    });
     var jsProcessor = new JsCompressor();
     var pathMapperProcessor = new PathMapper();
     var addCopyright = new AddCopyright();
     var versionProcessor = new Versioning({
-        // rename: true,
+        rename: true,
         filePaths: [
             'src/common/a.js'
         ],

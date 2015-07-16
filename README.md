@@ -62,7 +62,7 @@ npm install edp-build-versioning
                 // require 资源生成的版本号信息输出地方
                 output: '\'esl_resource_version\'',
                 
-                // 可以指定模块默认使用的版本号信息，当只指定输出特定的模块版本号信息，建议加上该选项
+                // 可以指定模块默认使用的版本号信息, 默认版本号为时间戳
                 // 页面中加上该配置项：require.config({ urlArgs: 'default_resource_version' });
                 defaultOutput: 'default_resource_version',
                 
@@ -215,7 +215,7 @@ var moduleCompiler = new ModuleCompiler({
         '!dep/feedback/feedback.js'
     ],
     getCombineConfig: function () {
-        var entryModuleIds = edpBuildHelper.extractPageEntryModules({}, {
+        var entryModuleIds = edpBuildHelper.extractPageEntryModules({
             scanDir: './templates',
             filter: function (id) {
                 // 滤掉不合并的模块
