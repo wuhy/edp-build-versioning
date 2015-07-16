@@ -44,6 +44,9 @@ npm install edp-build-versioning
             // 是否使用重命名文件方式而非查询参数方式，对于 `require` 只有 `combine` 开启时候
             // 才会重写模块的文件名称
             // rename: true,
+            
+            // 输出的md5摘要长度，默认8位
+            // md5Length: 10,
 
             require: {
                 // 要生成的路径前缀的版本号信息最大路径前缀深度，为了避免生成
@@ -186,3 +189,46 @@ require.config({
 <script src="src/version.js?v=832b5c8b70bfebe5"></script>
 ```
 
+### 附加功能
+
+```javascript
+var Versioning = require('edp-build-versioning');
+var edpBuildHelper = Versioning.helper;
+
+// 可以通过 `Versioning` 提供的 `helper` 工具自动其他页面引用的样式文件
+// 这样可以无需每次新增页面都需要添加要处理的样式文件
+var lessFiles = edpBuildHelper.extractLinkStyleFileSync({
+    scanDir: './templates',
+    preprocess: function (path) {
+        return path.replace(/\{\$site_host\}\//, '');
+    }
+});
+
+var lessCompiler = new LessCompiler({
+    files: lessFiles
+});
+
+// 通过 `Versioning` 提供的 `helper` 工具可以自动提取页面入口模块作为要打包合并的模块
+var moduleCompiler = new ModuleCompiler({
+    files: [
+        '*.js',
+        '!dep/feedback/feedback.js'
+    ],
+    getCombineConfig: function () {
+        var entryModuleIds = edpBuildHelper.extractPageEntryModules({}, {
+            scanDir: './templates',
+            filter: function (id) {
+                // 滤掉不合并的模块
+                return !/(^echarts|^common)\W*/.test(id);
+            }
+        });
+
+        var combineConf = {};
+        entryModuleIds.forEach(function (id) {
+            combineConf[id] = 1;
+        });
+
+        return combineConf;
+    }
+});
+```
