@@ -12,10 +12,20 @@ var inlineMd5Generator = require('./lib/inline-resource-md5');
 var requireMd5Generator = require('./lib/require-resource-md5');
 var cssURLVersioning = require('./lib/css-url-versioning');
 
-var ENTRY_REQUIRE_REGEXP = /(\s+require\s*\(\s*\[[^\]]+\]\s*[\)|,])/;
+var ASYNC_REQUIRE_REGEXP = /(\s+require\s*\(\s*\[[^\]]+\]\s*[\)|,])/;
+var SYNC_REQUIRE_REGEXP = /(require\(\s*['"])([^'"]+)(['"]\s*\))/g;
+var MODULE_DEFINE_REGEXP = /\s*define\(\s*(['"])([^'"]+)['"]\s*,\s*\[[^\[\]]+\]/g;
 
-function outputRequireVersionInfoByPage(processor, files, versionMap) {
-    var outputModuleIdMap = {};
+/**
+ * 查找入口模块信息
+ *
+ * @param {Object} processor
+ * @param {Array.<Object>} files 要处理的文件
+ * @param {Object} versionMap 版本号信息
+ * @return {Object}
+ */
+function findEntryModuleInfo(processor, files, versionMap) {
+    var pageEntryModuleMap = {};
 
     for (var i = 0, len = files.length; i < len; i++) {
         var fileInfo = files[i];
@@ -34,18 +44,50 @@ function outputRequireVersionInfoByPage(processor, files, versionMap) {
                 var mId = moduleIds[m];
                 if (versionMap[mId]) {
                     pageModuleVersionMap[mId] = versionMap[mId];
-                    outputModuleIdMap[mId] = 1;
                 }
             }
 
             // 输出入口模块的版本号信息的 require.config 配置信息
             if (Object.keys(pageModuleVersionMap).length) {
-                var requireUrlArgs = '\nrequire.config({ urlArgs: '
-                    + JSON.stringify(pageModuleVersionMap) + ' }); ';
-                fileInfo.data = fileInfo.data.replace(ENTRY_REQUIRE_REGEXP, requireUrlArgs + '$1');
+                pageEntryModuleMap[fileInfo.outputPath] = {
+                    file: fileInfo,
+                    versionInfo: pageModuleVersionMap
+                };
             }
         }
     }
+
+    return pageEntryModuleMap;
+}
+
+/**
+ * 按页面输出 require 的模块版本信息，即只是输出当前页面引用的模块的版本号信息
+ *
+ * @param {Object} processor
+ * @param {Array.<Object>} files 要处理的文件
+ * @param {Object} versionMap 版本号信息
+ * @return {{value: string}}
+ */
+function outputRequireVersionInfoByPage(processor, files, versionMap) {
+    var outputModuleIdMap = {};
+    var pageEntryModuleInfo = findEntryModuleInfo(processor, files, versionMap);
+
+    Object.keys(pageEntryModuleInfo).forEach(function (path) {
+        var item = pageEntryModuleInfo[path];
+        var versionInfo = item.versionInfo;
+        var fileInfo = item.file;
+
+        // 初始化已经输出的模块信息
+        Object.keys(versionInfo).forEach(function (moduleId) {
+            outputModuleIdMap[moduleId] = 1;
+        });
+
+        // 输出入口模块的版本号信息的 require.config 配置信息
+        var requireUrlArgs = '\nrequire.config({ urlArgs: '
+            + JSON.stringify(versionInfo) + ' }); ';
+        fileInfo.data = fileInfo.data.replace(ASYNC_REQUIRE_REGEXP, requireUrlArgs + '$1');
+    });
+
 
     // 输出指定的模块 id 的版本号信息, 过滤掉已经输出过的入口模块版本号信息
     var newVersionMap = {};
@@ -70,6 +112,156 @@ function outputRequireVersionInfoByPage(processor, files, versionMap) {
 }
 
 /**
+ * 更新 异步 require 的 模块 id
+ *
+ * @param {Object} processFile 要更新的文件
+ * @param {Object} renameModuleMap 要重命名的信息 map
+ */
+function updateAsyncRequireModule(processFile, renameModuleMap) {
+    processFile.data = processFile.data.replace(ASYNC_REQUIRE_REGEXP, function (match) {
+        Object.keys(renameModuleMap).forEach(function (moduleId) {
+            var regexp = new RegExp('[\'"]' + moduleId + '[\'"]');
+            match = match.replace(
+                regexp,
+                '\'' + renameModuleMap[moduleId].renameModuleId + '\''
+            );
+        });
+
+        return match;
+    });
+}
+
+/**
+ * 更新 同步 require 的 模块 id
+ *
+ * @param {Object} processFile 要更新的文件
+ * @param {Object} renameModuleMap 要重命名的信息 map
+ * @param {Object} processor 处理器
+ */
+function updateSyncRequireModule(processFile, renameModuleMap, processor) {
+    var data = processFile.data;
+    var rewritedModuleIdMap = {};
+    processFile.data = data.replace(SYNC_REQUIRE_REGEXP,
+        function ($0, $1, depId, $3) {
+
+            // 对于插件 require 的模块直接跳过
+            if (depId.indexOf('!') !== -1) {
+                return $0;
+            }
+
+            var moduleId = util.getAbsoluteModuleId(
+                processor.getModuleId(processFile.path), depId
+            );
+            var renameModuleInfo = renameModuleMap[moduleId];
+            if (!renameModuleInfo) {
+                return $0;
+            }
+
+            var replaceRegexp = new RegExp(util.getFileName(depId) + '$');
+            var renameDepId = depId.replace(replaceRegexp, renameModuleInfo.version);
+            rewritedModuleIdMap[depId] = {
+                replacer: new RegExp('([\'"])' + depId + '\\1'),
+                renameDepId: renameDepId
+            };
+
+            return $1 + renameDepId + $3;
+        }
+    ).replace(
+        MODULE_DEFINE_REGEXP,
+        function (match, $1, moduleId) {
+            var renameModuleInfo = renameModuleMap[moduleId];
+            if (renameModuleInfo) {
+                match = match.replace(
+                    $1 + moduleId + $1,
+                    $1 + renameModuleInfo.renameModuleId + $1
+                );
+            }
+
+            Object.keys(rewritedModuleIdMap).forEach(function (depId) {
+                var replaceInfo = rewritedModuleIdMap[depId];
+                match = match.replace(
+                    replaceInfo.replacer,
+                    '$1' + replaceInfo.renameDepId + '$1'
+                );
+            });
+
+            return match;
+        }
+    );
+}
+
+/**
+ * 更新 require 的 模块 id
+ *
+ * @param {Object} processor 处理器
+ * @param {Array.<Object>} files 要处理的文件
+ * @param {Object} renameModuleMap 要重命名的信息 map
+ */
+function updateRequireModuleId(processor, files, renameModuleMap) {
+    var tplSuffix = processor.fileSuffix.tpl;
+    var jsSuffix = processor.fileSuffix.js;
+
+    for (var i = 0, len = files.length; i < len; i++) {
+        var fileInfo = files[i];
+        var extname = fileInfo.extname;
+        if (util.isFileTypeOf(extname, tplSuffix)) {
+            updateAsyncRequireModule(fileInfo, renameModuleMap);
+        }
+        else if (util.isFileTypeOf(extname, jsSuffix)) {
+            updateAsyncRequireModule(fileInfo, renameModuleMap);
+            updateSyncRequireModule(fileInfo, renameModuleMap, processor);
+        }
+    }
+}
+
+/**
+ * 重写 require 模块 路径信息
+ *
+ * @param {Object} processor 处理器
+ * @param {Array.<Object>} files 要处理的文件
+ * @param {Object} versionMap 版本号信息 map
+ */
+function rewriteRequireModulePath(processor, files, versionMap) {
+    var toRenameModuleMap = {};
+
+    var initToRenameModuleInfo = function (versionInfo, moduleId) {
+        if (toRenameModuleMap[moduleId]) {
+            return;
+        }
+
+        var fileInfo = util.findFileByPath(
+            processor.sourceRoot + '/' + moduleId + '.js', files, true
+        );
+        var version = versionInfo[moduleId];
+        var outputPath = processor.getRenameFilePath(fileInfo.outputPath, version);
+        fileInfo.outputPath = outputPath;
+
+        var renameModuleId = processor.getModuleId(outputPath);
+        toRenameModuleMap[moduleId] = {
+            path: fileInfo.path,
+            moduleId: moduleId,
+            renameModuleId: renameModuleId,
+            version: util.getFileName(outputPath)
+        };
+    };
+
+    // 初始化入口模块
+    var pageEntryModuleInfo = findEntryModuleInfo(processor, files, versionMap);
+    Object.keys(pageEntryModuleInfo).forEach(function (path) {
+        var item = pageEntryModuleInfo[path];
+        var versionInfo = item.versionInfo;
+        Object.keys(versionInfo).forEach(initToRenameModuleInfo.bind(this, versionInfo));
+    });
+
+    // 初始化自定义要增加版本号的模块
+    (processor.moduleIds || []).forEach(initToRenameModuleInfo.bind(this, versionMap));
+
+    // 更新 require 引用
+    updateRequireModuleId(processor, files, toRenameModuleMap);
+}
+
+
+/**
  * 更新引用的资源的路径：为引用的资源路径加上版本号信息，或者替换资源文件的版本号信息的占位符
  * NOTICE: 这里只对非dep目录下的模板文件或者html文件的资源引用加上版本号信息其它忽略
  *
@@ -89,22 +281,23 @@ function updateResourceReference(processor, files, versionMap) {
     var keys = Object.keys(versionMap);
     keys.forEach(function (k) {
         var item = versionMap[k];
+        var versionInfo = item.value;
+
         if (item.outputByPage) {
-            versionMap[k] = outputRequireVersionInfoByPage(processor, files, item.value);
+            versionMap[k] = outputRequireVersionInfoByPage(processor, files, versionInfo);
         }
     });
 
-    var updateTarget = processor.updateTarget;
     for (var i = 0, len = files.length; i < len; i++) {
         var fileInfo = files[i];
 
-        if (updateTarget.call(processor, fileInfo)) {
+        if (processor.updateTarget(fileInfo)) {
             for (key in versionMap) {
                 var value = versionMap[key];
 
                 // 如果是一个object，则认为只是简单变量替换
                 if (typeof value === 'object') {
-                    value = value.value;
+                    value = util.stringify(value.value);
                 }
                 else {
                     value = key + '?v=' + value;
@@ -184,6 +377,11 @@ function getProcessFiles(processor, processContext) {
  * @param {string=} options.fileSuffix.js js文件后缀，多个以英文逗号分隔，可选，默认 'js'
  * @param {string=} options.fileSuffix.css css文件后缀，多个以英文逗号分隔，可选，默认 'css,less,styl'
  * @param {string=} options.fileSuffix.img 图片文件后缀，多个以英文逗号分隔，可选，默认 'png,jpg,gif'
+ *
+ * @param {number=}  options.md5length 计算的 md5 版本号长度，可选，默认8
+ * @param {boolean=} options.rename 是否重命名文件方式添加 md5 还是加查询参数方式，可选，
+ *                   默认加查询参数方式，对于 `require` 模块只对开启 `combine` 选项才会
+ *                   重写模块文件名
  *
  * @param {boolean=} opitons.autoScanCss 可以指定自动扫描所有css文件，为其引用
  *                          添加版本号信息，如果设为 true，会忽略`cssFilePaths` 的设置，
@@ -266,6 +464,9 @@ function getProcessFiles(processor, processContext) {
 function Versioning(options) {
     AbstractProcessor.call(this, options);
 
+    // 初始化 md5 版本号长度
+    this.md5Length || (this.md5Length = 8);
+
     // 初始化文件后缀信息
     initFileSuffixInfo(this);
 
@@ -298,6 +499,7 @@ function Versioning(options) {
         }
         this.moduleIds = combineModuleIds;
         this.requireOutputByPage = !!requireOption.outputByPage;
+        this.combine = true;
     }
 
     this.requireOutput = this.output || requireOption.output;
@@ -362,6 +564,21 @@ Versioning.prototype.process = function (file, processContext, callback) {
     // 初始化 `esl` require 的资源的版本信息
     var requireVersionMap = requireMd5Generator(this, files);
 
+    // 对于指定要输出版本号的模块且重命名情况下，重写模块名称，不使用 `urlArgs` 方式
+    if (this.combine && this.rename) {
+        var me = this;
+        Object.keys(requireVersionMap).some(function (k) {
+            var item = requireVersionMap[k];
+            var versionInfo = item.value;
+
+            if (!item.defaultVersion) {
+                rewriteRequireModulePath(me, files, versionInfo);
+                requireVersionMap[k] = {value: '\'\''};
+                return true;
+            }
+        });
+    }
+
     // 更新引用的资源的路径：为其加上版本号信息
     updateResourceReference(
         this, files, util.mixin(inlineVersionMap, requireVersionMap)
@@ -369,5 +586,34 @@ Versioning.prototype.process = function (file, processContext, callback) {
 
     callback();
 };
+
+/**
+ * 获取重命名的文件路径，格式为：<fileName>_<md5version>.<js>
+ *
+ * @param {string} filePath 原始文件路径
+ * @param {string} version 要添加的版本号信息
+ * @return {string}
+ */
+Versioning.prototype.getRenameFilePath = function (filePath, version) {
+    return filePath.replace(/(\.[^\.]+$)/, '_' + version + '$1');
+};
+
+/**
+ * 获取给定 JS 文件路径对应的模块 id
+ *
+ * @param {string} filePath 模块文件路径
+ * @return {string}
+ */
+Versioning.prototype.getModuleId = function (filePath) {
+    var renameModuleId = filePath.replace(this.sourceRootRegExp, '');
+    return util.removePathExtName(renameModuleId);
+};
+
+/**
+ * 对外暴露助手工具方法
+ *
+ * @type {Object}
+ */
+Versioning.helper = edpBuildHelper;
 
 module.exports = exports = Versioning;

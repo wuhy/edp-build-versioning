@@ -40,6 +40,10 @@ npm install edp-build-versioning
             cssURL: true,
             // 也可以指定特定的资源
             // cssURL: ['src/img/sprite.png'],
+            
+            // 是否使用重命名文件方式而非查询参数方式，对于 `require` 只有 `combine` 开启时候
+            // 才会重写模块的文件名称
+            // rename: true,
 
             require: {
                 // 要生成的路径前缀的版本号信息最大路径前缀深度，为了避免生成
@@ -57,7 +61,7 @@ npm install edp-build-versioning
                 
                 // 可以指定模块默认使用的版本号信息，当只指定输出特定的模块版本号信息，建议加上该选项
                 // 页面中加上该配置项：require.config({ urlArgs: 'default_resource_version' });
-                defaultOutput: '\'default_resource_version\'',
+                defaultOutput: 'default_resource_version',
                 
                 // 当使用 `combine` 且是多页面情况下，启用该选项，只会生成当前页面所引用入口模块
                 // 的版本号信息
