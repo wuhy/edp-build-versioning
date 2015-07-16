@@ -24,6 +24,7 @@ exports.getProcessors = function () {
                 console.log(id);
                 combineConf[id] = 1;
             });
+            combineConf['biz/bizMain'] = 1;
 
             return combineConf;
         }
@@ -39,7 +40,7 @@ exports.getProcessors = function () {
         cssURL: true,
         autoScanCss: true,
         require: {
-            combine: ['test', 'main', 'common/util', 'common/data'],
+            combine: ['test', 'main', 'common/util', 'common/data', 'biz/bizMain'],
             outputByPage: true,
             output: '\'esl_resource_version\'',
             defaultOutput: 'default_resource_version'
