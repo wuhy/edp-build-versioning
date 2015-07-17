@@ -14,7 +14,7 @@ var cssURLVersioning = require('./lib/css-url-versioning');
 
 var ASYNC_REQUIRE_REGEXP = /\s+require\s*\(\s*\[[^\]]+\]\s*[\)|,]/g;
 var SYNC_REQUIRE_REGEXP = /(require\(\s*['"])([^'"]+)(['"]\s*\))/g;
-var MODULE_DEFINE_REGEXP = /\s*define\(\s*(['"])([^'"]+)['"]\s*,\s*\[[^\[\]]+\]/g;
+var MODULE_DEFINE_REGEXP = /\s*define\(\s*(['"])([^'"]+)['"]\s*,\s*\[[^\[\]]*?\]/g;
 
 /**
  * 查找入口模块信息
