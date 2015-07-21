@@ -6,4 +6,5 @@
 define(function (require) {
     var a = require('./common/data');
     var test = require('test');
+    var data2 = require('./data2');
 });
