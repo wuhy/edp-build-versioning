@@ -12,7 +12,7 @@ var inlineMd5Generator = require('./lib/inline-resource-md5');
 var requireMd5Generator = require('./lib/require-resource-md5');
 var cssURLVersioning = require('./lib/css-url-versioning');
 
-var ASYNC_REQUIRE_REGEXP = /\s+require\s*\(\s*\[[^\]]+\]\s*[\)|,]/g;
+var ASYNC_REQUIRE_REGEXP = /\brequire\s*\(\s*\[[^\]]+\]\s*[\)|,]/g;
 var SYNC_REQUIRE_REGEXP = /(require\(\s*['"])([^'"]+)(['"]\s*\))/g;
 var MODULE_DEFINE_REGEXP = /\s*define\(\s*(['"])([^'"]+)['"]\s*,\s*\[[^\[\]]*?\]/g;
 
@@ -151,11 +151,15 @@ function updateSyncRequireModule(processFile, renameModuleMap, processor) {
     var matches;
     var lastMatch;
     var currMatch;
+    var prefix = '';
     while ((matches = MODULE_DEFINE_REGEXP.exec(data))) {
         currMatch = {index: matches.index, quot: matches[1], moduleId: matches[2]};
         if (lastMatch) {
             lastMatch.data = data.substring(lastMatch.index, currMatch.index);
             moduleDatas.push(lastMatch);
+        }
+        else {
+            prefix = data.substring(0, matches.index);
         }
         lastMatch = currMatch;
     }
@@ -170,6 +174,7 @@ function updateSyncRequireModule(processFile, renameModuleMap, processor) {
         var moduleId = item.moduleId;
         var rewritedModuleIdMap = {};
         return data.replace(SYNC_REQUIRE_REGEXP, function ($0, $1, depId, $3) {
+
             // 对于插件 require 的模块直接跳过
             if (depId.indexOf('!') !== -1) {
                 return $0;
@@ -192,7 +197,6 @@ function updateSyncRequireModule(processFile, renameModuleMap, processor) {
         }).replace(
             MODULE_DEFINE_REGEXP,
             function (match) {
-
                 // 更新 define 的 module id
                 var renameModuleInfo = renameModuleMap[moduleId];
                 if (renameModuleInfo) {
@@ -216,7 +220,9 @@ function updateSyncRequireModule(processFile, renameModuleMap, processor) {
         );
     });
 
-    processFile.data = moduleDatas.join('');
+    if (moduleDatas.length) {
+        processFile.data = prefix + moduleDatas.join('');
+    }
 }
 
 /**
@@ -420,10 +426,10 @@ function getProcessFiles(processor, processContext) {
  *                   默认加查询参数方式，对于 `require` 模块只对开启 `combine` 选项才会
  *                   重写模块文件名
  *
- * @param {boolean=} opitons.autoScanCss 可以指定自动扫描所有css文件，为其引用
+ *  @param {boolean=} opitons.autoScanCss 可以指定自动扫描所有css文件，为其引用
  *                          添加版本号信息，如果设为 true，会忽略`cssFilePaths` 的设置，
  *                          可选，默认false
- *@param {Array.<string>=} options.filePaths 要加上版本号信息的文件路径，可选
+ * @param {Array.<string>=} options.filePaths 要加上版本号信息的文件路径，可选
  *                          该选项只是简单对于指定的文件路径的引用加上 md5 值作为版本号
  *
  * @param {Array.<string>|boolean=} options.cssURL 是否为 css 定义的 url 引用的资源文件添加
