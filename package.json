@@ -1,6 +1,6 @@
 {
   "name": "edp-build-versioning",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "A versioning processor for EDP BUILD",
   "main": "Versioning.js",
   "scripts": {
