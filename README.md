@@ -4,9 +4,9 @@ edp-build-versioning
 
 > EDP Build plugin for Resource Versioning
 
-edp-build-versioning 是 [edp-build](https://github.com/ecomfe/edp-build)的一个插件，用于为 [esl](https://github.com/ecomfe/esl) `require` 的 `JS` 和 `TPL` 资源自动添加MD5版本号信息，也支持为 `CSS` 、`JS` 、`图片` 等内联资源文件自动添加 `MD5版本号` 信息。
+edp-build-versioning 是 [edp-build](https://github.com/ecomfe/edp-build) 的一个插件，用于为 [esl](https://github.com/ecomfe/esl) `require` 的 `JS` 和 `TPL` 资源自动添加 MD5 版本号信息，也支持为 `CSS` 、`JS` 、`图片` 等内联资源文件自动添加 `MD5 版本号` 信息。
 
-关于edp支持的版本号处理方案及关于 `Versioning` 处理器实现方案一个简单探讨，参见这个 [Issue] (https://github.com/ecomfe/edp/issues/232)。
+关于edp支持的版本号处理方案及关于 `Versioning` 处理器实现方案一个简单探讨，参见这个 [Issue](https://github.com/ecomfe/edp/issues/232)。
 
 ## 如何使用
 
@@ -195,7 +195,7 @@ require.config({
 var Versioning = require('edp-build-versioning');
 var edpBuildHelper = Versioning.helper;
 
-// 可以通过 `Versioning` 提供的 `helper` 工具自动其他页面引用的样式文件
+// 可以通过 `Versioning` 提供的 `helper` 工具自动其提取他页面引用的样式文件
 // 这样可以无需每次新增页面都需要添加要处理的样式文件
 var lessFiles = edpBuildHelper.extractLinkStyleFileSync({
     scanDir: './templates',
